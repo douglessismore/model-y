@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Model Y Premium · the financing picture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      fontFamily: {
+        display: ['Fraunces', 'ui-serif', 'Georgia', 'serif'],
+        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+      },
+      colors: { paper: '#FBF8F3', ink: '#1B1A17' },
+    } },
+  };
+</script>
+<style>
+  html, body { background: #FBF8F3; color: #1B1A17; }
+  body { font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .display { font-family: 'Fraunces', Georgia, serif; font-variation-settings: "opsz" 96; letter-spacing: -0.015em; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .number-tabular { font-variant-numeric: tabular-nums; }
+  .ring-soft { box-shadow: 0 1px 0 rgba(27,26,23,0.04), 0 0 0 1px rgba(27,26,23,0.08); }
+  input[type="range"] { -webkit-appearance: none; appearance: none; height: 6px; background: #E7E2D6; border-radius: 999px; outline: none; }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 26px; height: 26px; border-radius: 999px; background: #1B1A17; cursor: pointer; border: 4px solid #FBF8F3; box-shadow: 0 0 0 1px #1B1A17; }
+  input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; border-radius: 999px; background: #1B1A17; cursor: pointer; border: 4px solid #FBF8F3; box-shadow: 0 0 0 1px #1B1A17; }
+  .inline-num { width: 4.5rem; background: transparent; border: 0; border-bottom: 1px dotted #c7c2b8; padding: 2px; font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; font-size: 0.875rem; color: #44403c; outline: none; }
+  .inline-num:hover { border-bottom-color: #57534e; }
+  .inline-num:focus { border-bottom: 1px solid #1B1A17; color: #1B1A17; }
+  .inline-num::-webkit-outer-spin-button, .inline-num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  @media print { .no-print { display: none !important; } body { background: white; } }
+</style>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/prop-types@15/prop-types.min.js"></script>
+<script crossorigin src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useMemo } = React;
+const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine } = Recharts;
+
+// ─── Constants from the actual Tesla quote ───────────────────────────────────
+const CASH_PRICE = 54960;     // all-in, includes taxes & fees
+const PURCHASE_PRICE = 51630; // vehicle + destination + order fee, pre-tax
+const TAXES_FEES = CASH_PRICE - PURCHASE_PRICE; // ~3,330
+const MIN_DOWN = 3332;        // minimum due at delivery (covers taxes & fees)
+const APR = 0.99;
+const TERM = 72;
+
+// Exact monthly figures Tesla quoted, for the reference table
+const QUOTES = [
+  { down: 3332,  monthly: 739, note: 'Minimum — taxes & fees only, ~$0 toward the car' },
+  { down: 5000,  monthly: 715, note: '' },
+  { down: 10000, monthly: 644, note: '' },
+  { down: 20000, monthly: 501, note: '' },
+  { down: 30000, monthly: 357, note: '' },
+  { down: 54960, monthly: 0,   note: 'Paid in full — no loan' },
+];
+
+// ─── Math ────────────────────────────────────────────────────────────────────
+function loanPayment(principal) {
+  if (principal <= 0) return 0;
+  const r = APR / 100 / 12;
+  return (principal * r) / (1 - Math.pow(1 + r, -TERM));
+}
+function scenario(down) {
+  const loan = Math.max(0, CASH_PRICE - down);
+  const monthly = loanPayment(loan);
+  const totalPayments = monthly * TERM;
+  const totalInterest = totalPayments - loan;
+  const totalCar = down + totalPayments;
+  return { down, loan, monthly, totalPayments, totalInterest, totalCar };
+}
+
+const fmt = (n, d = 0) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: d, minimumFractionDigits: d }).format(n);
+const fmtK = (n) => Math.abs(n) >= 1000 ? '$' + (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : fmt(n);
+
+// ─── Primitives ──────────────────────────────────────────────────────────────
+function Section({ children, className = '' }) {
+  return <section className={`max-w-5xl mx-auto px-5 sm:px-10 ${className}`}>{children}</section>;
+}
+
+// ─── Header ──────────────────────────────────────────────────────────────────
+function Header() {
+  return (
+    <header className="border-b border-stone-200/70">
+      <div className="max-w-5xl mx-auto px-5 sm:px-10 py-4 flex items-center justify-between">
+        <div className="text-sm text-stone-600">Tesla Model Y Premium · financing</div>
+        <div className="hidden sm:block text-xs text-stone-400">0.99% APR · 72 months</div>
+      </div>
+    </header>
+  );
+}
+
+// ─── Hero ────────────────────────────────────────────────────────────────────
+function Hero() {
+  return (
+    <Section className="pt-10 sm:pt-14 pb-8">
+      <div className="mono text-xs tracking-[0.2em] uppercase text-stone-500 mb-3">
+        Tesla Model Y Premium AWD · Quicksilver · white interior · 5-seat
+      </div>
+      <h1 className="display text-3xl sm:text-5xl font-medium text-ink leading-[1.05] max-w-3xl">
+        The financing picture, one screen.
+      </h1>
+      <p className="mt-4 text-base sm:text-lg text-stone-600 max-w-2xl leading-relaxed">
+        All-in price is <span className="text-ink font-medium">{fmt(CASH_PRICE)}</span> including
+        Texas taxes and fees. Financed at <span className="text-ink font-medium">0.99% APR over 72 months</span>.
+        Everything below shows how the down payment changes the monthly — and why it barely
+        changes the total.
+      </p>
+    </Section>
+  );
+}
+
+// ─── Key insight ─────────────────────────────────────────────────────────────
+function KeyInsight() {
+  const maxInterest = scenario(MIN_DOWN).totalInterest;
+  return (
+    <Section className="pb-8 sm:pb-10">
+      <div className="rounded-2xl bg-emerald-50/70 ring-1 ring-emerald-200 p-6 sm:p-8">
+        <div className="mono text-[10px] tracking-[0.18em] uppercase text-emerald-700 mb-3">The one thing to understand</div>
+        <p className="display text-xl sm:text-2xl text-ink leading-snug max-w-3xl">
+          Because the rate is only 0.99%, the total cost is almost the same no matter what's put down.
+        </p>
+        <p className="mt-4 text-stone-700 leading-relaxed max-w-2xl">
+          Financing the entire amount costs about <span className="text-ink font-medium">{fmt(maxInterest)}</span> in
+          interest across all six years — roughly {fmt(maxInterest / 72)}/month. That's the whole price
+          of borrowing the money instead of paying cash. It's low enough that the down payment is
+          really a <span className="text-ink font-medium">cash-flow decision</span> (what monthly is
+          comfortable) rather than a way to save money.
+        </p>
+      </div>
+    </Section>
+  );
+}
+
+// ─── Interactive explorer ────────────────────────────────────────────────────
+function Explorer() {
+  const [down, setDown] = useState(20000);
+  const s = scenario(down);
+  return (
+    <Section className="pb-8 sm:pb-10">
+      <div className="rounded-2xl bg-white ring-soft p-6 sm:p-9">
+        <h2 className="display text-2xl sm:text-3xl font-medium text-ink mb-1">Try any down payment</h2>
+        <p className="text-sm text-stone-500 mb-7">Drag to see the monthly payment and totals update.</p>
+
+        <div className="grid sm:grid-cols-[1fr,auto] gap-8 sm:gap-12 items-end">
+          <div>
+            <div className="flex items-baseline justify-between mb-3">
+              <span className="text-sm text-stone-700">Down payment (cash up front)</span>
+              <span className="mono text-lg text-ink number-tabular">{fmt(down)}</span>
+            </div>
+            <input type="range" min={MIN_DOWN} max={CASH_PRICE} step={250} value={down}
+                   onChange={(e) => setDown(parseFloat(e.target.value))} className="w-full" />
+            <div className="flex justify-between mt-2 text-xs text-stone-400">
+              <span>{fmt(MIN_DOWN)} min</span>
+              <span>{fmt(CASH_PRICE)} (paid in full)</span>
+            </div>
+          </div>
+          <div className="text-right sm:border-l sm:border-stone-200 sm:pl-12">
+            <div className="mono text-[10px] tracking-[0.18em] uppercase text-stone-500 mb-1">Monthly payment</div>
+            <div className="display text-5xl sm:text-6xl font-medium text-ink number-tabular leading-none">
+              {fmt(s.monthly)}
+            </div>
+            <div className="text-sm text-stone-500 mt-2">for 72 months</div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 sm:gap-8 mt-9 pt-7 border-t border-stone-100">
+          <div>
+            <div className="mono text-[10px] tracking-[0.18em] uppercase text-stone-500 mb-1.5">Amount financed</div>
+            <div className="display text-xl sm:text-2xl font-medium number-tabular">{fmt(s.loan)}</div>
+          </div>
+          <div>
+            <div className="mono text-[10px] tracking-[0.18em] uppercase text-stone-500 mb-1.5">Total of 72 payments</div>
+            <div className="display text-xl sm:text-2xl font-medium number-tabular">{fmt(s.totalPayments)}</div>
+          </div>
+          <div>
+            <div className="mono text-[10px] tracking-[0.18em] uppercase text-stone-500 mb-1.5">Interest paid</div>
+            <div className="display text-xl sm:text-2xl font-medium number-tabular text-amber-700">{fmt(s.totalInterest)}</div>
+          </div>
+          <div>
+            <div className="mono text-[10px] tracking-[0.18em] uppercase text-stone-500 mb-1.5">Total cost of car</div>
+            <div className="display text-xl sm:text-2xl font-medium number-tabular">{fmt(s.totalCar)}</div>
+          </div>
+        </div>
+        <p className="text-xs text-stone-400 mt-6">
+          Total cost of car = down payment + all 72 payments. It ranges only from {fmt(CASH_PRICE)} (paid in full)
+          to {fmt(scenario(MIN_DOWN).totalCar)} (minimum down) — a spread of just {fmt(scenario(MIN_DOWN).totalInterest)}.
+        </p>
+      </div>
+    </Section>
+  );
+}
+
+// ─── Scenarios table ─────────────────────────────────────────────────────────
+function ScenariosTable() {
+  return (
+    <Section className="pb-8 sm:pb-10">
+      <div className="rounded-2xl bg-white ring-soft overflow-hidden">
+        <div className="px-5 sm:px-8 pt-6 pb-2">
+          <h2 className="display text-2xl sm:text-3xl font-medium text-ink">The exact Tesla quotes</h2>
+          <p className="text-sm text-stone-500 mt-1">Straight from the configurator — these are the real numbers, not estimates.</p>
+        </div>
+        <div className="sm:hidden px-5 pt-2 pb-1 flex items-center gap-2 text-xs text-stone-500 bg-stone-50/40 border-t border-stone-100">
+          <span aria-hidden>←</span><span>Swipe to see all columns</span><span aria-hidden>→</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="text-left text-stone-500">
+                <th className="px-4 sm:px-8 py-3 mono text-[10px] tracking-[0.15em] uppercase font-medium">Down payment</th>
+                <th className="px-3 py-3 mono text-[10px] tracking-[0.15em] uppercase font-medium text-right">Monthly</th>
+                <th className="px-3 py-3 mono text-[10px] tracking-[0.15em] uppercase font-medium text-right">72 payments</th>
+                <th className="px-3 py-3 mono text-[10px] tracking-[0.15em] uppercase font-medium text-right">Interest</th>
+                <th className="px-4 sm:px-8 py-3 mono text-[10px] tracking-[0.15em] uppercase font-medium text-right">Total cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {QUOTES.map((q) => {
+                const totalPayments = q.monthly * TERM;
+                const totalCar = q.down + totalPayments;
+                const interest = totalCar - CASH_PRICE;
+                return (
+                  <tr key={q.down} className="border-t border-stone-100">
+                    <td className="px-4 sm:px-8 py-4">
+                      <div className="font-medium text-ink number-tabular">{fmt(q.down)}</div>
+                      {q.note && <div className="text-xs text-stone-500 mt-0.5">{q.note}</div>}
+                    </td>
+                    <td className="px-3 py-4 text-right">
+                      <span className="display text-lg sm:text-xl font-medium number-tabular text-ink">{q.monthly > 0 ? fmt(q.monthly) : '—'}</span>
+                    </td>
+                    <td className="px-3 py-4 mono text-sm number-tabular text-stone-700 text-right">{fmt(totalPayments)}</td>
+                    <td className="px-3 py-4 mono text-sm number-tabular text-amber-700 text-right">{fmt(interest)}</td>
+                    <td className="px-4 sm:px-8 py-4 mono text-sm number-tabular text-ink text-right">{fmt(totalCar)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+// ─── Monthly chart ───────────────────────────────────────────────────────────
+function MonthlyChart() {
+  const data = QUOTES.filter((q) => q.monthly > 0).map((q) => ({
+    label: fmtK(q.down) + ' down',
+    monthly: q.monthly,
+  }));
+  return (
+    <Section className="pb-8 sm:pb-10">
+      <div className="rounded-2xl bg-white ring-soft p-6 sm:p-8">
+        <h2 className="display text-2xl sm:text-3xl font-medium text-ink mb-1">Monthly payment by down payment</h2>
+        <p className="text-sm text-stone-500 mb-6">More down means a lower monthly. The total cost stays nearly flat (see table above).</p>
+        <div className="h-64 sm:h-72">
+          <ResponsiveContainer>
+            <BarChart data={data} margin={{ top: 16, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke="#E7E2D6" strokeDasharray="2 4" vertical={false} />
+              <XAxis dataKey="label" tick={{ fill: '#57534e', fontSize: 11 }} tickLine={false} axisLine={{ stroke: '#E7E2D6' }} />
+              <YAxis tick={{ fill: '#78716c', fontSize: 11 }} tickLine={false} axisLine={{ stroke: '#E7E2D6' }} tickFormatter={(v) => '$' + v} width={48} />
+              <Tooltip contentStyle={{ background: '#FBF8F3', border: '1px solid #E7E2D6', borderRadius: 8, fontSize: 12 }} formatter={(v) => [fmt(v) + '/mo', 'Monthly']} cursor={{ fill: 'rgba(27,26,23,0.04)' }} />
+              <Bar dataKey="monthly" radius={[6, 6, 0, 0]} fill="#1B1A17" label={{ position: 'top', fill: '#1B1A17', fontSize: 12, formatter: (v) => '$' + v }} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+// ─── Full cost to own ────────────────────────────────────────────────────────
+function FullCost() {
+  const [down, setDown] = useState(20000);
+  const [annualMiles, setAnnualMiles] = useState(35000);
+  const [electricityRate, setElectricityRate] = useState(0.14);
+  const [insurance, setInsurance] = useState(210);
+  const [maintenance, setMaintenance] = useState(60);
+  const milesPerKwh = 3.5;
+
+  const s = scenario(down);
+  const electricity = (annualMiles / 12) / milesPerKwh * electricityRate;
+  const operating = electricity + insurance + maintenance;
+  const allInMonthly = s.monthly + operating;
+  const lifetime = s.totalCar + operating * TERM;
+
+  return (
+    <Section className="pb-8 sm:pb-10">
+      <div className="rounded-2xl bg-white ring-soft p-6 sm:p-9">
+        <h2 className="display text-2xl sm:text-3xl font-medium text-ink mb-1">The full monthly + 6-year picture</h2>
+        <p className="text-sm text-stone-500 mb-7">
+          The loan payment is what's being financed. Running costs (electricity, insurance, maintenance) are
+          paid no matter how it's financed. Adjust any number — insurance especially, once the real quote is in.
+        </p>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <label className="block">
+            <div className="flex items-baseline justify-between mb-2">
+              <span className="text-sm text-stone-700">Down payment</span>
+              <span className="mono text-sm text-ink number-tabular">{fmt(down)}</span>
+            </div>
+            <input type="range" min={MIN_DOWN} max={CASH_PRICE} step={250} value={down} onChange={(e) => setDown(parseFloat(e.target.value))} className="w-full" />
+          </label>
+          <label className="block">
+            <div className="flex items-baseline justify-between mb-2">
+              <span className="text-sm text-stone-700">Annual miles</span>
+              <span className="mono text-sm text-ink number-tabular">{annualMiles.toLocaleString()}</span>
+            </div>
+            <input type="range" min={10000} max={50000} step={1000} value={annualMiles} onChange={(e) => setAnnualMiles(parseFloat(e.target.value))} className="w-full" />
+          </label>
+          <div>
+            <div className="text-sm text-stone-700 mb-1.5">Insurance / mo <span className="text-amber-700 text-xs">· estimate</span></div>
+            <div className="flex items-baseline"><span className="text-stone-400 text-sm mr-1">$</span><input type="number" value={insurance} onChange={(e) => setInsurance(parseFloat(e.target.value) || 0)} className="inline-num" /></div>
+            <div className="text-xs text-stone-400 mt-1">Update with your real quote</div>
+          </div>
+          <div>
+            <div className="text-sm text-stone-700 mb-1.5">Maintenance / mo</div>
+            <div className="flex items-baseline"><span className="text-stone-400 text-sm mr-1">$</span><input type="number" value={maintenance} onChange={(e) => setMaintenance(parseFloat(e.target.value) || 0)} className="inline-num" /></div>
+            <div className="text-xs text-stone-400 mt-1">EVs are low — tires, wipers, cabin filter</div>
+          </div>
+        </div>
+
+        <div className="rounded-xl ring-soft overflow-hidden">
+          <table className="w-full text-sm">
+            <tbody>
+              <tr className="border-b border-stone-100">
+                <td className="px-4 sm:px-6 py-3 text-stone-700">Loan payment</td>
+                <td className="px-4 sm:px-6 py-3 mono number-tabular text-right text-ink">{fmt(s.monthly)}/mo</td>
+              </tr>
+              <tr className="border-b border-stone-100">
+                <td className="px-4 sm:px-6 py-3 text-stone-600">Electricity <span className="text-xs text-stone-400">· {annualMiles.toLocaleString()} mi/yr @ {milesPerKwh} mi/kWh</span></td>
+                <td className="px-4 sm:px-6 py-3 mono number-tabular text-right text-stone-700">{fmt(electricity)}/mo</td>
+              </tr>
+              <tr className="border-b border-stone-100">
+                <td className="px-4 sm:px-6 py-3 text-stone-600">Insurance</td>
+                <td className="px-4 sm:px-6 py-3 mono number-tabular text-right text-stone-700">{fmt(insurance)}/mo</td>
+              </tr>
+              <tr className="border-b border-stone-100">
+                <td className="px-4 sm:px-6 py-3 text-stone-600">Maintenance</td>
+                <td className="px-4 sm:px-6 py-3 mono number-tabular text-right text-stone-700">{fmt(maintenance)}/mo</td>
+              </tr>
+              <tr className="bg-stone-50/60 border-b border-stone-100">
+                <td className="px-4 sm:px-6 py-4 text-ink font-medium">All-in monthly</td>
+                <td className="px-4 sm:px-6 py-4 text-right"><span className="display text-xl sm:text-2xl text-ink number-tabular">{fmt(allInMonthly)}</span><span className="text-sm text-stone-500">/mo</span></td>
+              </tr>
+              <tr className="bg-stone-50/60">
+                <td className="px-4 sm:px-6 py-4 text-ink font-medium">Total cost to own + operate, 6 years</td>
+                <td className="px-4 sm:px-6 py-4 text-right"><span className="display text-xl sm:text-2xl text-ink number-tabular">{fmt(lifetime)}</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+// ─── Notes ───────────────────────────────────────────────────────────────────
+function Notes() {
+  return (
+    <Section className="pb-20">
+      <div className="border-t border-stone-200 pt-8 grid sm:grid-cols-2 gap-6 text-sm text-stone-600 leading-relaxed">
+        <div>
+          <div className="mono text-[10px] tracking-[0.18em] uppercase text-stone-500 mb-2">The car</div>
+          Model Y Premium AWD, 5-seat, Quicksilver paint (a $2,000 upgrade, included free) and white
+          interior (free upgrade). Warranty: 4 years / 50,000 miles basic; 8 years / 120,000 miles
+          battery & drive unit.
+        </div>
+        <div>
+          <div className="mono text-[10px] tracking-[0.18em] uppercase text-stone-500 mb-2">The financing</div>
+          {fmt(PURCHASE_PRICE)} purchase price (incl. destination & order fee) + {fmt(TAXES_FEES)} taxes
+          & fees = {fmt(CASH_PRICE)} all-in. 0.99% promotional APR, 72-month term, excellent credit.
+          The loan has no prepayment penalty — paying extra anytime reduces the small interest further.
+        </div>
+        <div>
+          <div className="mono text-[10px] tracking-[0.18em] uppercase text-stone-500 mb-2">What's exact vs estimated</div>
+          Down payment, monthly payment, and interest are exact from Tesla's quote. Electricity,
+          insurance, and maintenance are estimates and adjustable above — insurance is the one worth
+          replacing with a real quote.
+        </div>
+        <div>
+          <div className="mono text-[10px] tracking-[0.18em] uppercase text-stone-500 mb-2">Not included</div>
+          The optional FSD subscription ($99/mo, separate from financing) and any home-charger install.
+          Figures are for understanding the decision, not a formal financing document.
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function App() {
+  return (
+    <div className="min-h-screen">
+      <Header />
+      <Hero />
+      <KeyInsight />
+      <Explorer />
+      <ScenariosTable />
+      <MonthlyChart />
+      <FullCost />
+      <Notes />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
