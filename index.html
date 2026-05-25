@@ -52,6 +52,7 @@ const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 // ─── Constants from the actual Tesla quote ───────────────────────────────────
 const CASH_PRICE = 54960;     // all-in (5-seat config), matches Tesla's finance calculator
 const MIN_DOWN = 3332;        // minimum due at delivery (covers taxes & fees)
+const MAX_DOWN = 41380;       // Tesla caps the financed down payment here (min loan ~$13,580)
 const APR = 0.99;
 const TERM = 72;
 
@@ -185,11 +186,11 @@ function Explorer() {
               <span className="text-sm text-stone-700">Down payment (cash up front)</span>
               <span className="mono text-lg text-ink number-tabular">{fmt(down)}</span>
             </div>
-            <input type="range" min={MIN_DOWN} max={CASH_PRICE} step={250} value={down}
+            <input type="range" min={MIN_DOWN} max={MAX_DOWN} step={250} value={down}
                    onChange={(e) => setDown(parseFloat(e.target.value))} className="w-full" />
             <div className="flex justify-between mt-2 text-xs text-stone-400">
               <span>{fmt(MIN_DOWN)} min</span>
-              <span>{fmt(CASH_PRICE)} (paid in full)</span>
+              <span>{fmt(MAX_DOWN)} max down</span>
             </div>
           </div>
           <div className="text-right sm:border-l sm:border-stone-200 sm:pl-12">
@@ -337,7 +338,7 @@ function FullCost() {
               <span className="text-sm text-stone-700">Down payment</span>
               <span className="mono text-sm text-ink number-tabular">{fmt(down)}</span>
             </div>
-            <input type="range" min={MIN_DOWN} max={CASH_PRICE} step={250} value={down} onChange={(e) => setDown(parseFloat(e.target.value))} className="w-full" />
+            <input type="range" min={MIN_DOWN} max={MAX_DOWN} step={250} value={down} onChange={(e) => setDown(parseFloat(e.target.value))} className="w-full" />
           </label>
           <label className="block">
             <div className="flex items-baseline justify-between mb-2">
