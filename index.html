@@ -50,35 +50,61 @@ const { useState, useMemo } = React;
 const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine } = Recharts;
 
 // ─── Constants from the actual Tesla quote ───────────────────────────────────
-const CASH_PRICE = 54960;     // all-in, includes taxes & fees
-const PURCHASE_PRICE = 51630; // vehicle + destination + order fee, pre-tax
-const TAXES_FEES = CASH_PRICE - PURCHASE_PRICE; // ~3,330
+const CASH_PRICE = 54960;     // all-in (5-seat config), matches Tesla's finance calculator
 const MIN_DOWN = 3332;        // minimum due at delivery (covers taxes & fees)
 const APR = 0.99;
 const TERM = 72;
 
-// Exact monthly figures Tesla quoted, for the reference table
-const QUOTES = [
-  { down: 3332,  monthly: 739, note: 'Minimum — taxes & fees only, ~$0 toward the car' },
-  { down: 5000,  monthly: 715, note: '' },
-  { down: 10000, monthly: 644, note: '' },
-  { down: 20000, monthly: 501, note: '' },
-  { down: 30000, monthly: 357, note: '' },
-  { down: 54960, monthly: 0,   note: 'Paid in full — no loan' },
+// Exact monthly figures straight from Tesla's own calculator (down payment -> monthly),
+// 0.99% APR / 72-month term. These are verified values, not formula estimates.
+const TESLA_QUOTES = [
+  [3332,739],[5000,715],[6000,701],[7000,687],[8000,672],[9000,658],[10000,644],
+  [11000,629],[12000,615],[13000,601],[14000,586],[15000,572],[16000,558],[17000,543],
+  [18000,529],[19000,515],[20000,501],[21000,486],[22000,472],[23000,458],[24000,443],
+  [25000,429],[26000,415],[27000,400],[28000,386],[29000,372],[30000,357],[31000,343],
+  [32000,329],[33000,314],[34000,300],[35000,286],[36000,271],[37000,257],[38000,243],
+  [39000,228],[40000,214],[41000,200],[42000,186],[43000,171],[44000,157],
+];
+
+// Reference rows for the scenarios table
+const TABLE_ROWS = [
+  { down: 3332,  note: 'Minimum — taxes & fees only, ~$0 toward the car' },
+  { down: 5000,  note: '' },
+  { down: 10000, note: '' },
+  { down: 15000, note: '' },
+  { down: 20000, note: '' },
+  { down: 25000, note: '' },
+  { down: 30000, note: '' },
+  { down: 35000, note: '' },
+  { down: 40000, note: '' },
 ];
 
 // ─── Math ────────────────────────────────────────────────────────────────────
-function loanPayment(principal) {
-  if (principal <= 0) return 0;
-  const r = APR / 100 / 12;
-  return (principal * r) / (1 - Math.pow(1 + r, -TERM));
+// Looks up Tesla's exact monthly for a down payment; interpolates between verified
+// points and extends past the last point along the same slope (toward $0 at payoff).
+function monthlyForDown(down) {
+  const pts = TESLA_QUOTES;
+  if (down <= pts[0][0]) return pts[0][1];
+  const last = pts[pts.length - 1];
+  if (down >= last[0]) {
+    const prev = pts[pts.length - 2];
+    const slope = (last[1] - prev[1]) / (last[0] - prev[0]);
+    return Math.max(0, last[1] + slope * (down - last[0]));
+  }
+  for (let i = 0; i < pts.length - 1; i++) {
+    if (down >= pts[i][0] && down <= pts[i + 1][0]) {
+      const t = (down - pts[i][0]) / (pts[i + 1][0] - pts[i][0]);
+      return pts[i][1] + t * (pts[i + 1][1] - pts[i][1]);
+    }
+  }
+  return last[1];
 }
 function scenario(down) {
-  const loan = Math.max(0, CASH_PRICE - down);
-  const monthly = loanPayment(loan);
+  const monthly = Math.round(monthlyForDown(down));
   const totalPayments = monthly * TERM;
-  const totalInterest = totalPayments - loan;
+  const loan = Math.max(0, CASH_PRICE - down);
   const totalCar = down + totalPayments;
+  const totalInterest = Math.max(0, totalCar - CASH_PRICE);
   return { down, loan, monthly, totalPayments, totalInterest, totalCar };
 }
 
@@ -210,7 +236,7 @@ function ScenariosTable() {
       <div className="rounded-2xl bg-white ring-soft overflow-hidden">
         <div className="px-5 sm:px-8 pt-6 pb-2">
           <h2 className="display text-2xl sm:text-3xl font-medium text-ink">The exact Tesla quotes</h2>
-          <p className="text-sm text-stone-500 mt-1">Straight from the configurator — these are the real numbers, not estimates.</p>
+          <p className="text-sm text-stone-500 mt-1">Monthly figures verified directly against Tesla's calculator — not estimates.</p>
         </div>
         <div className="sm:hidden px-5 pt-2 pb-1 flex items-center gap-2 text-xs text-stone-500 bg-stone-50/40 border-t border-stone-100">
           <span aria-hidden>←</span><span>Swipe to see all columns</span><span aria-hidden>→</span>
@@ -227,18 +253,19 @@ function ScenariosTable() {
               </tr>
             </thead>
             <tbody>
-              {QUOTES.map((q) => {
-                const totalPayments = q.monthly * TERM;
-                const totalCar = q.down + totalPayments;
-                const interest = totalCar - CASH_PRICE;
+              {TABLE_ROWS.map((row) => {
+                const monthly = Math.round(monthlyForDown(row.down));
+                const totalPayments = monthly * TERM;
+                const totalCar = row.down + totalPayments;
+                const interest = Math.max(0, totalCar - CASH_PRICE);
                 return (
-                  <tr key={q.down} className="border-t border-stone-100">
+                  <tr key={row.down} className="border-t border-stone-100">
                     <td className="px-4 sm:px-8 py-4">
-                      <div className="font-medium text-ink number-tabular">{fmt(q.down)}</div>
-                      {q.note && <div className="text-xs text-stone-500 mt-0.5">{q.note}</div>}
+                      <div className="font-medium text-ink number-tabular">{fmt(row.down)}</div>
+                      {row.note && <div className="text-xs text-stone-500 mt-0.5">{row.note}</div>}
                     </td>
                     <td className="px-3 py-4 text-right">
-                      <span className="display text-lg sm:text-xl font-medium number-tabular text-ink">{q.monthly > 0 ? fmt(q.monthly) : '—'}</span>
+                      <span className="display text-lg sm:text-xl font-medium number-tabular text-ink">{fmt(monthly)}</span>
                     </td>
                     <td className="px-3 py-4 mono text-sm number-tabular text-stone-700 text-right">{fmt(totalPayments)}</td>
                     <td className="px-3 py-4 mono text-sm number-tabular text-amber-700 text-right">{fmt(interest)}</td>
@@ -256,9 +283,9 @@ function ScenariosTable() {
 
 // ─── Monthly chart ───────────────────────────────────────────────────────────
 function MonthlyChart() {
-  const data = QUOTES.filter((q) => q.monthly > 0).map((q) => ({
-    label: fmtK(q.down) + ' down',
-    monthly: q.monthly,
+  const data = TABLE_ROWS.map((row) => ({
+    label: fmtK(row.down) + ' down',
+    monthly: Math.round(monthlyForDown(row.down)),
   }));
   return (
     <Section className="pb-8 sm:pb-10">
@@ -374,27 +401,43 @@ function Notes() {
       <div className="border-t border-stone-200 pt-8 grid sm:grid-cols-2 gap-6 text-sm text-stone-600 leading-relaxed">
         <div>
           <div className="mono text-[10px] tracking-[0.18em] uppercase text-stone-500 mb-2">The car</div>
-          Model Y Premium AWD, 5-seat, Quicksilver paint (a $2,000 upgrade, included free) and white
-          interior (free upgrade). Warranty: 4 years / 50,000 miles basic; 8 years / 120,000 miles
-          battery & drive unit.
+          Model Y Premium AWD, 5-seat. Quicksilver paint, Black &amp; White premium interior.
+          Warranty: 4 years / 50,000 miles basic; 8 years / 120,000 miles battery &amp; drive unit.
+        </div>
+        <div>
+          <div className="mono text-[10px] tracking-[0.18em] uppercase text-stone-500 mb-2">Price breakdown (5-seat, from receipt)</div>
+          Base $34,000 + premium interior $1,000 + Quicksilver $2,000 + Premium AWD $15,990 +
+          destination $1,390 + order fee $250 − referral credit $2,500 = <span className="text-ink">$52,130</span> car price.
+          Plus Texas registration, plate, inspection, and 6.25% sales tax. The current order still lists
+          a $2,500 seven-seat option being removed.
         </div>
         <div>
           <div className="mono text-[10px] tracking-[0.18em] uppercase text-stone-500 mb-2">The financing</div>
-          {fmt(PURCHASE_PRICE)} purchase price (incl. destination & order fee) + {fmt(TAXES_FEES)} taxes
-          & fees = {fmt(CASH_PRICE)} all-in. 0.99% promotional APR, 72-month term, excellent credit.
-          The loan has no prepayment penalty — paying extra anytime reduces the small interest further.
+          0.99% promotional APR, 72-month term, excellent credit. Monthly figures are exact from
+          Tesla's own calculator. No prepayment penalty — paying extra anytime trims the
+          (already small) interest further.
         </div>
         <div>
-          <div className="mono text-[10px] tracking-[0.18em] uppercase text-stone-500 mb-2">What's exact vs estimated</div>
-          Down payment, monthly payment, and interest are exact from Tesla's quote. Electricity,
-          insurance, and maintenance are estimates and adjustable above — insurance is the one worth
-          replacing with a real quote.
+          <div className="mono text-[10px] tracking-[0.18em] uppercase text-stone-500 mb-2">Exact vs estimated · not included</div>
+          Down payment, monthly, and interest come straight from Tesla. Electricity, insurance, and
+          maintenance are estimates and adjustable above — insurance is the one worth replacing with a
+          real quote. FSD ($99/mo) and any home-charger install are not included.
         </div>
-        <div>
-          <div className="mono text-[10px] tracking-[0.18em] uppercase text-stone-500 mb-2">Not included</div>
-          The optional FSD subscription ($99/mo, separate from financing) and any home-charger install.
-          Figures are for understanding the decision, not a formal financing document.
-        </div>
+      </div>
+    </Section>
+  );
+}
+
+function StatusNote() {
+  return (
+    <Section className="pb-6">
+      <div className="rounded-xl bg-amber-50/70 ring-1 ring-amber-200 p-4 sm:p-5 text-sm text-stone-700 leading-relaxed">
+        <span className="text-ink font-medium">Note on the current order:</span> it accidentally
+        includes a $2,500 seven-seat option that's being removed. Because a $2,500 referral credit is
+        also on the order, removing the seven-seat turns that credit into a real ~$2,500 reduction —
+        so the corrected five-seat order is about $2,500 cheaper than the receipt currently shows. The
+        finance numbers below are exact from Tesla's calculator; the final all-in total will be
+        confirmed on the corrected receipt.
       </div>
     </Section>
   );
@@ -405,6 +448,7 @@ function App() {
     <div className="min-h-screen">
       <Header />
       <Hero />
+      <StatusNote />
       <KeyInsight />
       <Explorer />
       <ScenariosTable />
