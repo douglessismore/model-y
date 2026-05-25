@@ -139,10 +139,9 @@ function Hero() {
         The financing picture, one screen.
       </h1>
       <p className="mt-4 text-base sm:text-lg text-stone-600 max-w-2xl leading-relaxed">
-        Corrected five-seat order: about <span className="text-ink font-medium">$55,824</span> all-in
-        with Texas taxes and fees — down from $58,480 with the seven-seat on it. Financed at
-        <span className="text-ink font-medium"> 0.99% APR over 72 months</span>. Everything below shows
-        how the down payment changes the monthly — and why it barely changes the total.
+        All-in is about <span className="text-ink font-medium">$54,960</span> with Texas taxes and fees.
+        Financed at <span className="text-ink font-medium">0.99% APR over 72 months</span>. Everything
+        below shows how the down payment changes the monthly — and why it barely changes the total.
       </p>
     </Section>
   );
@@ -190,7 +189,7 @@ function Explorer() {
                    onChange={(e) => setDown(parseFloat(e.target.value))} className="w-full" />
             <div className="flex justify-between mt-2 text-xs text-stone-400">
               <span>{fmt(MIN_DOWN)} min</span>
-              <span>paid in full</span>
+              <span>{fmt(CASH_PRICE)} (paid in full)</span>
             </div>
           </div>
           <div className="text-right sm:border-l sm:border-stone-200 sm:pl-12">
@@ -405,11 +404,10 @@ function Notes() {
           Warranty: 4 years / 50,000 miles basic; 8 years / 120,000 miles battery &amp; drive unit.
         </div>
         <div>
-          <div className="mono text-[10px] tracking-[0.18em] uppercase text-stone-500 mb-2">Price breakdown (5-seat, from receipt)</div>
-          Base $34,000 + premium interior $1,000 + Quicksilver $2,000 + Premium AWD $15,990 +
-          destination $1,390 + order fee $250 − referral credit $2,500 = <span className="text-ink">$52,130</span> car price.
-          + registration $332.50 + plate $95.50 + inspection $7.50 + 6.25% sales tax $3,258.13 =
-          <span className="text-ink"> $55,823.63</span> all-in (down from $58,479.88 with the seven-seat).
+          <div className="mono text-[10px] tracking-[0.18em] uppercase text-stone-500 mb-2">Price breakdown</div>
+          Vehicle, options, destination &amp; order fee: $51,630. Plus estimated Texas sales tax,
+          registration, plate, and inspection: about $3,330. <span className="text-ink">≈ $54,960 all-in</span>,
+          before the down payment.
         </div>
         <div>
           <div className="mono text-[10px] tracking-[0.18em] uppercase text-stone-500 mb-2">The financing</div>
@@ -428,28 +426,11 @@ function Notes() {
   );
 }
 
-function StatusNote() {
-  return (
-    <Section className="pb-6">
-      <div className="rounded-xl bg-amber-50/70 ring-1 ring-amber-200 p-4 sm:p-5 text-sm text-stone-700 leading-relaxed">
-        <span className="text-ink font-medium">Note on the current order:</span> it accidentally
-        includes a $2,500 seven-seat option that's being removed. Because a $2,500 referral credit is
-        also on the order, removing the seven-seat turns that credit into a real ~$2,500 reduction.
-        The corrected five-seat total works out to about <span className="text-ink font-medium">$55,824</span>{' '}
-        (car price $52,130 + Texas taxes &amp; fees) — down from $58,479.88. The monthly figures below are
-        unchanged: they were already for the five-seat configuration and remain exact from Tesla's
-        calculator.
-      </div>
-    </Section>
-  );
-}
-
 function App() {
   return (
     <div className="min-h-screen">
       <Header />
       <Hero />
-      <StatusNote />
       <KeyInsight />
       <Explorer />
       <ScenariosTable />
